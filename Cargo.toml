@@ -1,0 +1,21 @@
+[package]
+name = "raytracer"
+version = "0.1.0"
+authors = ["Phillip Cloud <cpcloud@gmail.com>"]
+
+[dependencies]
+rand = '*'
+clap = '*'
+indicatif = '*'
+rayon = '*'
+lazy_static = '*'
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+panic = 'abort'
+incremental = false
+overflow-checks = false
