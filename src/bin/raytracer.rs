@@ -159,7 +159,10 @@ fn main() {
         .collect();
     let ndims = dims.len();
     if ndims != 2 {
-        panic!("{} image dimensions given, must give exactly 2 as MxN", ndims);
+        panic!(
+            "{} image dimensions given, must give exactly 2 as MxN",
+            ndims
+        );
     }
 
     let (width, height) = (dims[0], dims[1]);
@@ -238,7 +241,9 @@ fn main() {
                             let ray = camera.ray(u, v);
                             color(&ray, &world, 0)
                         })
-                        .sum::<Vec3>().div(nsamples as f64).powf(1.0 / gamma);
+                        .sum::<Vec3>()
+                        .div(nsamples as f64)
+                        .powf(1.0 / gamma);
                     pb.inc(nsamples as u64);
                     (y * width + x, (col.r(), col.g(), col.b()))
                 })
