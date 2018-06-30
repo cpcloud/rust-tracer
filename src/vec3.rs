@@ -33,6 +33,8 @@ impl Vec3 {
         3usize
     }
 
+    pub const fn is_empty(&self) -> bool { false }
+
     pub const fn zeros() -> Self {
         ZEROS
     }
@@ -107,6 +109,13 @@ impl Vec3 {
     }
 }
 
+#[macro_export]
+macro_rules! vec3 {
+    [$x:expr, $y:expr, $z:expr] => {
+        Vec3::new(($x) as f64, ($y) as f64, ($z) as f64)
+    }
+}
+
 impl Sum for Vec3 {
     fn sum<I: Iterator<Item = Vec3>>(iter: I) -> Vec3 {
         iter.fold(Vec3::zeros(), Add::add)
@@ -132,6 +141,14 @@ impl FromIterator<f64> for Vec3 {
     }
 }
 
+//#[test]
+//fn test_from_vec() {
+//    let vec = vec![1.0, 2.0, 3.0];
+//    let result: Vec3 = vec.iter().collect();
+//    let expected = vec3![1, 2, 3];
+//    assert_eq!(result, expected);
+//}
+
 impl AsRef<Vec3> for Vec3 {
     fn as_ref(&self) -> &Vec3 {
         self
@@ -147,18 +164,18 @@ impl Index<usize> for Vec3 {
             0 => &x,
             1 => &y,
             2 => &z,
-            _ => panic!(format!("Invalid index {}, must be 0, 1, or 2", i)),
+            _ => panic!("Invalid index {}, must be 0, 1, or 2", i),
         }
     }
 }
 
 impl IndexMut<usize> for Vec3 {
-    fn index_mut<'a>(&'a mut self, i: usize) -> &'a mut f64 {
+    fn index_mut(&mut self, i: usize) -> &mut f64 {
         match i {
             0 => &mut self.x,
             1 => &mut self.y,
             2 => &mut self.z,
-            _ => panic!(format!("Invalid index {}, must be 0, 1, or 2", i)),
+            _ => panic!("Invalid index {}, must be 0, 1, or 2", i),
         }
     }
 }
@@ -180,6 +197,12 @@ fn test_new() {
 fn test_len() {
     let u = Vec3::new(0.0, 0.0, 0.0);
     assert_eq!(u.len(), 3);
+}
+
+#[test]
+fn test_is_empty() {
+    let u = vec3![0, 0, 0];
+    assert_eq!(u.is_empty(), false);
 }
 
 #[test]
@@ -579,11 +602,4 @@ fn test_neg_vec() {
     let result = -u;
     let expected = Vec3::new(-1.0, -2.0, -3.0);
     assert_eq!(result, expected);
-}
-
-#[macro_export]
-macro_rules! vec3 {
-    [$x:expr, $y:expr, $z:expr] => {
-        Vec3::new(($x) as f64, ($y) as f64, ($z) as f64)
-    }
 }

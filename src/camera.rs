@@ -41,16 +41,16 @@ impl Camera {
         let u = vup.cross(w).unitize();
         let v = w.cross(u);
         Camera {
-            origin: origin,
+            origin,
             lower_left_corner: origin
                 - half_width * focus_dist * u
                 - half_height * focus_dist * v
                 - focus_dist * w,
             horizontal: 2.0 * half_width * focus_dist * u,
             vertical: 2.0 * half_height * focus_dist * v,
-            u: u,
-            v: v,
-            lens_radius: lens_radius,
+            u,
+            v,
+            lens_radius,
         }
     }
 

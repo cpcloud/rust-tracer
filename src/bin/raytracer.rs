@@ -1,3 +1,4 @@
+#![feature(box_syntax)]
 extern crate clap;
 extern crate indicatif;
 extern crate rayon;
@@ -9,10 +10,9 @@ use clap::{App, Arg};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use raytracer::camera::Camera;
-use raytracer::hittable::Hittable;
-use raytracer::material::{dielectric, lambertian, metal};
+use raytracer::mat;
 use raytracer::ray::Ray;
-use raytracer::shape::{hittable_list, sphere};
+use raytracer::shape::{sphere, Hittable, HittableList};
 use raytracer::utils::{rand, randvec};
 use raytracer::vec3::{ColorVec, GeomVec, Vec3};
 use std::f64;
@@ -21,12 +21,18 @@ use std::io::Write;
 use std::iter::Iterator;
 use std::ops::Div;
 
-fn random_scene(ball_density: i64) -> Box<Hittable> {
-    let mut list = vec![sphere(
-        vec3![0, -1000, 0],
-        1000.0,
-        lambertian(vec3![0.5, 0.5, 0.5]),
-    )];
+fn random_scene(ball_density: isize) -> Box<Hittable> {
+    let mut list = vec![
+        sphere(
+            vec3![0, -1000, 0],
+            1000.0,
+            mat::lambertian(vec3![0.5, 0.5, 0.5]),
+        ),
+        sphere(vec3![-4, 1, 0], 1.0, mat::lambertian(vec3![0.4, 0.2, 0.1])),
+        sphere(vec3![0, 1, 0], 1.0, mat::dielectric(1.5)),
+        sphere(vec3![4, 1, 0], 1.0, mat::metal(vec3![0.7, 0.6, 0.5], 0.0)),
+    ];
+    list.reserve(ball_density.pow(2) as usize);
 
     for a in -ball_density..ball_density {
         for b in -ball_density..ball_density {
@@ -34,28 +40,26 @@ fn random_scene(ball_density: i64) -> Box<Hittable> {
             let center = vec3![a as f64 + 0.9 * rand(), 0.2, b as f64 + 0.9 * rand()];
             if (center - vec3![4, 0.2, 0]).norm() > 0.9 {
                 list.push(if choose_mat < 0.8 {
-                    sphere(center, 0.2, lambertian(randvec() * randvec()))
+                    sphere(center, 0.2, mat::lambertian(randvec() * randvec()))
                 } else if choose_mat < 0.95 {
-                    sphere(center, 0.2, metal((randvec() + 1.0) * 0.5, 0.5 * rand()))
+                    sphere(
+                        center,
+                        0.2,
+                        mat::metal((randvec() + 1.0) * 0.5, 0.5 * rand()),
+                    )
                 } else {
-                    sphere(center, 0.2, dielectric(1.5))
+                    sphere(center, 0.2, mat::dielectric(1.5))
                 });
             }
         }
     }
 
-    list.extend(vec![
-        sphere(vec3![-4, 1, 0], 1.0, lambertian(vec3![0.4, 0.2, 0.1])),
-        sphere(vec3![0, 1, 0], 1.0, dielectric(1.5)),
-        sphere(vec3![4, 1, 0], 1.0, metal(vec3![0.7, 0.6, 0.5], 0.0)),
-    ]);
-
-    hittable_list(list)
+    box HittableList::new(list)
 }
 
-fn color(ray: &Ray, world: &Box<Hittable>, depth: u64) -> Vec3 {
+fn color(ray: &Ray, world: &Hittable, depth: usize) -> Vec3 {
     if let Some(rec) = world.hit(&ray, 0.001, f64::MAX) {
-        if let Some((attenuation, scattered)) = rec.mat.scatter(&ray, &rec) {
+        if let Some((attenuation, scattered)) = rec.material().scatter(&ray, &rec) {
             if depth < 50 {
                 attenuation * color(&scattered, world, depth + 1)
             } else {
@@ -111,7 +115,7 @@ fn main() {
                 .long("ball-density")
                 .value_name("BALL_DENSITY")
                 .help("Density of balls")
-                .default_value("5")
+                .default_value("11")
                 .required(false),
         )
         .arg(
@@ -121,7 +125,7 @@ fn main() {
                 .value_name("LOOK_FROM")
                 .help("Vantage point")
                 .use_delimiter(true)
-                .default_value("14,3,2")
+                .default_value("13,2,3")
                 .required(false),
         )
         .arg(
@@ -131,7 +135,7 @@ fn main() {
                 .value_name("LOOK_AT")
                 .help("Where to look")
                 .use_delimiter(true)
-                .default_value("0,0,-1")
+                .default_value("0,0,0")
                 .required(false),
         )
         .arg(
@@ -140,7 +144,7 @@ fn main() {
                 .long("aperture")
                 .value_name("APERTURE")
                 .help("Aperture")
-                .default_value("0.5")
+                .default_value("0.1")
                 .required(false),
         )
         .arg(
@@ -150,6 +154,15 @@ fn main() {
                 .help("Output filename")
                 .value_name("FILENAME")
                 .required(true),
+        )
+        .arg(
+            Arg::with_name("dist_to_focus")
+                .short("x")
+                .long("dist-to-focus")
+                .help("Distance to focus")
+                .value_name("DIST_TO_FOCUS")
+                .default_value("10.0")
+                .required(false),
         );
     let matches = app.get_matches();
     let dims: Vec<usize> = matches
@@ -176,7 +189,7 @@ fn main() {
         .unwrap_or_default()
         .parse()
         .expect("Unable to parse gamma value");
-    let ball_density: i64 = matches
+    let ball_density: isize = matches
         .value_of("ball_density")
         .unwrap_or_default()
         .parse()
@@ -199,8 +212,11 @@ fn main() {
     let filename: &str = matches
         .value_of("filename")
         .expect("Unable to retrive value of filename argument");
-
-    let dist_to_focus = (lookfrom - lookat).norm();
+    let dist_to_focus: f64 = matches
+        .value_of("dist_to_focus")
+        .unwrap_or(&(lookfrom - lookat).norm().to_string())
+        .parse()
+        .expect("Unable to parse value of distance to focus argument");
     let fwidth = width as f64;
     let fheight = height as f64;
 
@@ -213,8 +229,7 @@ fn main() {
         aperture,
         dist_to_focus,
     );
-    let world = random_scene(ball_density);
-
+    let world = &*random_scene(ball_density);
     let pb = ProgressBar::new((height * width * nsamples) as u64);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -228,26 +243,30 @@ fn main() {
     writeln!(file, "{} {}", width, height).expect("Unable to write width and height to PPM");
     writeln!(file, "255").expect("Unable to write max pixel color value to PPM");
 
+    let gamma = 1.0 / gamma;
+
     let mut rows = (0..height)
-        .into_par_iter()
+//        .into_par_iter()
+        .into_iter()
         .flat_map(|y| {
             let fy = (height - y) as f64;
-            (0..width)
-                .map(|x| {
-                    let col: Vec3 = (0..nsamples)
-                        .map(|_| {
-                            let u = (x as f64 + rand()) / fwidth;
-                            let v = (fy + rand()) / fheight;
-                            let ray = camera.ray(u, v);
-                            color(&ray, &world, 0)
-                        })
-                        .sum::<Vec3>()
-                        .div(nsamples as f64)
-                        .powf(1.0 / gamma);
-                    pb.inc(nsamples as u64);
-                    (y * width + x, (col.r(), col.g(), col.b()))
-                })
-                .collect::<Vec<_>>()
+            let mut res: Vec<(usize, (u8, u8, u8))> = Vec::with_capacity(width);
+            for x in 0..width {
+                let col = (0..nsamples)
+                    .map(|_| {
+                        let u = (x as f64 + rand()) / fwidth;
+                        let v = (fy + rand()) / fheight;
+                        let ray = camera.ray(u, v);
+                        color(&ray, world, 0)
+                    })
+                    .sum::<Vec3>()
+                    .div(nsamples as f64)
+                    .powf(gamma);
+                pb.inc(nsamples as u64);
+                let value = (y * width + x, (col.r(), col.g(), col.b()));
+                res.push(value);
+            }
+            res
         })
         .collect::<Vec<_>>();
     rows.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
