@@ -8,7 +8,6 @@ rand = '*'
 clap = '*'
 indicatif = '*'
 rayon = '*'
-lazy_static = '*'
 
 [profile.release]
 opt-level = 3

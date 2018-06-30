@@ -19,6 +19,7 @@ use std::f64;
 use std::fs::File;
 use std::io::Write;
 use std::iter::Iterator;
+use std::ops::Div;
 
 fn random_scene(ball_density: i64) -> Box<Hittable> {
     let mut list = vec![sphere(
@@ -76,21 +77,14 @@ fn main() {
         .about("Ray tracing in rust")
         .version("1.0.0")
         .arg(
-            Arg::with_name("width")
-                .short("w")
-                .long("width")
-                .value_name("WIDTH")
-                .help("Image width")
-                .default_value("200")
-                .required(false),
-        )
-        .arg(
-            Arg::with_name("height")
-                .short("H")
-                .long("height")
-                .value_name("HEIGHT")
-                .help("Image height")
-                .default_value("100")
+            Arg::with_name("imagedims")
+                .short("d")
+                .long("image-dims")
+                .value_name("IMAGE_DIMS")
+                .help("Image width x height")
+                .default_value("400x200")
+                .use_delimiter(true)
+                .value_delimiter("x")
                 .required(false),
         )
         .arg(
@@ -113,7 +107,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("ball_density")
-                .short("d")
+                .short("D")
                 .long("ball-density")
                 .value_name("BALL_DENSITY")
                 .help("Density of balls")
@@ -122,7 +116,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("lookfrom")
-                .short("f")
+                .short("F")
                 .long("look-from")
                 .value_name("LOOK_FROM")
                 .help("Vantage point")
@@ -158,16 +152,17 @@ fn main() {
                 .required(true),
         );
     let matches = app.get_matches();
-    let width: usize = matches
-        .value_of("width")
+    let dims: Vec<usize> = matches
+        .values_of("imagedims")
         .unwrap_or_default()
-        .parse()
-        .expect("Unable to parse width value");
-    let height: usize = matches
-        .value_of("height")
-        .unwrap_or_default()
-        .parse()
-        .expect("Unable to parse height value");
+        .map(|f| f.parse().unwrap())
+        .collect();
+    let ndims = dims.len();
+    if ndims != 2 {
+        panic!("{} image dimensions given, must give exactly 2 as MxN", ndims);
+    }
+
+    let (width, height) = (dims[0], dims[1]);
     let nsamples: usize = matches
         .value_of("samples")
         .unwrap_or_default()
@@ -211,7 +206,7 @@ fn main() {
         lookat,
         vec3![0, 1, 0],
         20.0,
-        width as f64 / height as f64,
+        fwidth / fheight,
         aperture,
         dist_to_focus,
     );
@@ -220,7 +215,7 @@ fn main() {
     let pb = ProgressBar::new((height * width * nsamples) as u64);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+            .template("[{elapsed_precise}] {bar:40.cyan/blue} {percent}%")
             .progress_chars("##-"),
     );
 
@@ -230,31 +225,26 @@ fn main() {
     writeln!(file, "{} {}", width, height).expect("Unable to write width and height to PPM");
     writeln!(file, "255").expect("Unable to write max pixel color value to PPM");
 
-    let ypoints: Vec<_> = (0..height).collect();
-    let mut rows: Vec<_> = ypoints
-        .par_iter()
-        .flat_map(|y| -> Vec<_> {
-            let yi = y;
-            let y = height - y;
-            let fy = y as f64;
+    let mut rows = (0..height)
+        .into_par_iter()
+        .flat_map(|y| {
+            let fy = (height - y) as f64;
             (0..width)
                 .map(|x| {
-                    let fx = x as f64;
-                    let mut col = Vec3::zeros();
-                    for _ in 0..nsamples {
-                        let u = (fx + rand()) / fwidth;
-                        let v = (fy + rand()) / fheight;
-                        let r = camera.ray(u, v);
-                        col += color(&r, &world, 0);
-                    }
-                    col /= nsamples as f64;
-                    col = col.powf(1.0 / gamma);
+                    let col: Vec3 = (0..nsamples)
+                        .map(|_| {
+                            let u = (x as f64 + rand()) / fwidth;
+                            let v = (fy + rand()) / fheight;
+                            let ray = camera.ray(u, v);
+                            color(&ray, &world, 0)
+                        })
+                        .sum::<Vec3>().div(nsamples as f64).powf(1.0 / gamma);
                     pb.inc(nsamples as u64);
-                    (yi * width + x, (col.r(), col.g(), col.b()))
+                    (y * width + x, (col.r(), col.g(), col.b()))
                 })
-                .collect()
+                .collect::<Vec<_>>()
         })
-        .collect();
+        .collect::<Vec<_>>();
     rows.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
     for (_, (r, g, b)) in rows {
         writeln!(file, "{} {} {}", r, g, b).expect("Unable to write pixel");
