@@ -1,4 +1,4 @@
-use std::iter::FromIterator;
+use std::iter::{FromIterator, Sum};
 use std::ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, Neg, Sub};
 
 pub trait GeomVec {
@@ -53,6 +53,10 @@ impl Vec3 {
         *self / self.norm()
     }
 
+    pub fn sum(&self) -> f64 {
+        self.x + self.y + self.z
+    }
+
     pub fn dot<T: AsRef<Vec3>>(&self, other: T) -> f64 {
         let Vec3 { x, y, z } = other.as_ref();
         self.x * x + self.y * y + self.z * z
@@ -100,6 +104,12 @@ impl Vec3 {
         } else {
             None
         }
+    }
+}
+
+impl Sum for Vec3 {
+    fn sum<I: Iterator<Item = Vec3>>(iter: I) -> Vec3 {
+        iter.fold(Vec3::zeros(), Add::add)
     }
 }
 

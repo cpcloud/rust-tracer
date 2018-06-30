@@ -11,6 +11,5 @@ pub mod material;
 pub mod ray;
 pub mod shape;
 
-#[macro_use]
-extern crate lazy_static;
+extern crate rand;
 pub mod utils;

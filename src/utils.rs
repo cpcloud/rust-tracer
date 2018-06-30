@@ -1,18 +1,9 @@
-extern crate rand;
-
-use self::rand::{Rng, SeedableRng, StdRng};
-
-use std::sync::Mutex;
+use rand;
 
 use vec3::Vec3;
 
-lazy_static! {
-    static ref RNG: Mutex<StdRng> = Mutex::new(SeedableRng::from_seed([0u8; 32]));
-}
-
 pub fn rand() -> f64 {
-    RNG.lock().unwrap().gen()
-    //    RNG.sample_iter(&Standard).take(5).collect::<Vec<(f64, f64)>>()
+    rand::random()
 }
 
 pub fn randvec() -> Vec3 {
