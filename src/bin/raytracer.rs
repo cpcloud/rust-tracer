@@ -246,8 +246,7 @@ fn main() {
     let gamma = 1.0 / gamma;
 
     let mut rows = (0..height)
-//        .into_par_iter()
-        .into_iter()
+        .into_par_iter()
         .flat_map(|y| {
             let fy = (height - y) as f64;
             let mut res: Vec<(usize, (u8, u8, u8))> = Vec::with_capacity(width);
