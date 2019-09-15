@@ -2,12 +2,14 @@
 name = "raytracer"
 version = "0.1.0"
 authors = ["Phillip Cloud <cpcloud@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 rand = '*'
 clap = '*'
 indicatif = '*'
 rayon = '*'
+itertools = '*'
 
 [profile.release]
 opt-level = 3

@@ -1,7 +1,6 @@
-use ray::Ray;
+use crate::ray::Ray;
+use crate::vec3::{GeomVec, Vec3};
 use std::f64;
-use utils::rand;
-use vec3::{GeomVec, Vec3};
 
 pub struct Camera {
     origin: Vec3,
@@ -11,15 +10,6 @@ pub struct Camera {
     u: Vec3,
     v: Vec3,
     lens_radius: f64,
-}
-
-fn random_in_unit_disk() -> Vec3 {
-    let one_one_zero = vec3![1, 1, 0];
-    let mut p = 2.0 * vec3![rand(), rand(), 0] - one_one_zero;
-    while p.norm2() >= 1.0 {
-        p = 2.0 * vec3![rand(), rand(), 0] - one_one_zero;
-    }
-    p
 }
 
 impl Camera {
@@ -56,11 +46,13 @@ impl Camera {
 
     pub fn ray(&self, s: f64, t: f64) -> Ray {
         let origin = self.origin;
-        let rd = self.lens_radius * random_in_unit_disk();
+        let rd = self.lens_radius * Vec3::rand_in_disk();
         let offset = self.u * rd.x() + self.v * rd.y();
         Ray::new(
             origin + offset,
-            self.lower_left_corner + s * self.horizontal + t * self.vertical - origin - offset,
+            self.lower_left_corner + s * self.horizontal + t * self.vertical
+                - origin
+                - offset,
         )
     }
 }

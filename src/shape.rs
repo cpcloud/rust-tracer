@@ -1,9 +1,9 @@
-use super::mat::Material;
-use hitrecord::HitRecord;
-use ray::Ray;
+use crate::hitrecord::HitRecord;
+use crate::mat::Material;
+use crate::ray::Ray;
+use crate::vec3::Vec3;
 use std::f64;
 use std::marker::Sync;
-use vec3::Vec3;
 
 pub trait Hittable: Sync {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
@@ -31,12 +31,22 @@ impl Hittable for Sphere {
             let t = (-b - disc_sqrt) / a;
             if t < t_max && t > t_min {
                 let point = ray.point(t);
-                Some(HitRecord::new(t, point, (point - center) / radius, &self.material))
+                Some(HitRecord::new(
+                    t,
+                    point,
+                    (point - center) / radius,
+                    &self.material,
+                ))
             } else {
                 let t = (-b + disc_sqrt) / a;
                 if t < t_max && t > t_min {
                     let point = ray.point(t);
-                    Some(HitRecord::new(t, point, (point - center) / radius, &self.material))
+                    Some(HitRecord::new(
+                        t,
+                        point,
+                        (point - center) / radius,
+                        &self.material,
+                    ))
                 } else {
                     None
                 }
@@ -47,7 +57,11 @@ impl Hittable for Sphere {
     }
 }
 
-pub fn sphere(center: Vec3, radius: f64, material: Material) -> Box<Hittable> {
+pub fn sphere(
+    center: Vec3,
+    radius: f64,
+    material: Material,
+) -> Box<dyn Hittable> {
     box Sphere {
         center,
         radius,
@@ -56,20 +70,19 @@ pub fn sphere(center: Vec3, radius: f64, material: Material) -> Box<Hittable> {
 }
 
 pub struct HittableList {
-    items: Vec<Box<Hittable>>,
+    items: Vec<Box<dyn Hittable>>,
 }
 
 impl HittableList {
-    pub fn new(items: Vec<Box<Hittable>>) -> HittableList {
+    pub fn new(items: Vec<Box<dyn Hittable>>) -> HittableList {
         HittableList { items }
     }
 }
 
 impl Hittable for HittableList {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
-        let mut rec: Option<HitRecord> = None;
         let mut closest_so_far = t_max;
-
+        let mut rec = None;
         for item in &self.items {
             if let Some(temp_rec) = item.hit(ray, t_min, closest_so_far) {
                 closest_so_far = temp_rec.t();

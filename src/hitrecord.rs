@@ -1,5 +1,4 @@
-use super::mat::Material;
-use vec3::Vec3;
+use crate::{mat::Material, vec3::Vec3};
 
 pub struct HitRecord<'a> {
     t: f64,
@@ -9,7 +8,12 @@ pub struct HitRecord<'a> {
 }
 
 impl<'a> HitRecord<'a> {
-    pub const fn new(t: f64, p: Vec3, normal: Vec3, material: &'a Material) -> Self {
+    pub const fn new(
+        t: f64,
+        p: Vec3,
+        normal: Vec3,
+        material: &'a Material,
+    ) -> Self {
         HitRecord {
             t,
             p,

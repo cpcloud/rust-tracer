@@ -1,4 +1,4 @@
-use vec3::Vec3;
+use crate::vec3::Vec3;
 
 pub struct Ray {
     origin: Vec3,
@@ -7,7 +7,7 @@ pub struct Ray {
 
 impl Ray {
     pub fn new(origin: Vec3, direction: Vec3) -> Self {
-        Ray { origin, direction }
+        Self { origin, direction }
     }
 
     pub fn origin(&self) -> Vec3 {
@@ -25,7 +25,7 @@ impl Ray {
 
 #[test]
 fn test_ray() {
-    let origin = vec3![1, -2, -3];
+    let origin = v3![1.0, -2.0, -3.0];
     let direction = origin * 1.03;
     let result = Ray::new(origin, direction);
     assert_eq!(result.origin(), origin);

@@ -1,79 +1,96 @@
 #![feature(box_syntax)]
-extern crate clap;
-extern crate indicatif;
-extern crate rayon;
-
-#[macro_use]
-extern crate raytracer;
 
 use clap::{App, Arg};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
-use raytracer::camera::Camera;
-use raytracer::mat;
-use raytracer::ray::Ray;
+
+use itertools::Itertools;
+
 use raytracer::shape::{sphere, Hittable, HittableList};
-use raytracer::utils::{rand, randvec};
 use raytracer::vec3::{ColorVec, GeomVec, Vec3};
+use raytracer::{camera, mat, ray, utils, v3};
+
 use std::f64;
 use std::fs::File;
 use std::io::Write;
 use std::iter::Iterator;
 use std::ops::Div;
 
-fn random_scene(ball_density: isize) -> Box<Hittable> {
-    let mut list = vec![
-        sphere(
-            vec3![0, -1000, 0],
-            1000.0,
-            mat::lambertian(vec3![0.5, 0.5, 0.5]),
-        ),
-        sphere(vec3![-4, 1, 0], 1.0, mat::lambertian(vec3![0.4, 0.2, 0.1])),
-        sphere(vec3![0, 1, 0], 1.0, mat::dielectric(1.5)),
-        sphere(vec3![4, 1, 0], 1.0, mat::metal(vec3![0.7, 0.6, 0.5], 0.0)),
-    ];
-    list.reserve(ball_density.pow(2) as usize);
-
-    for a in -ball_density..ball_density {
-        for b in -ball_density..ball_density {
-            let choose_mat = rand();
-            let center = vec3![a as f64 + 0.9 * rand(), 0.2, b as f64 + 0.9 * rand()];
-            if (center - vec3![4, 0.2, 0]).norm() > 0.9 {
-                list.push(if choose_mat < 0.8 {
-                    sphere(center, 0.2, mat::lambertian(randvec() * randvec()))
-                } else if choose_mat < 0.95 {
-                    sphere(
-                        center,
-                        0.2,
-                        mat::metal((randvec() + 1.0) * 0.5, 0.5 * rand()),
-                    )
-                } else {
-                    sphere(center, 0.2, mat::dielectric(1.5))
-                });
-            }
-        }
+fn generate_center(a: f64, b: f64) -> Option<Vec3> {
+    let center = v3![a + 0.9 * utils::rand(), 0.2, b + 0.9 * utils::rand()];
+    if (center - v3![4.0, 0.2, 0.0]).norm() > 0.9 {
+        Some(center)
+    } else {
+        None
     }
+}
+
+fn random_scene(ball_density: isize) -> Box<dyn Hittable> {
+    assert!(ball_density >= 0);
+    let list = vec![
+        sphere(
+            v3![0.0, -1000.0, 0.0],
+            1000.0,
+            mat::lambertian(v3![0.5, 0.5, 0.5]),
+        ),
+        sphere(
+            v3![-4.0, 1.0, 0.0],
+            1.0,
+            mat::lambertian(v3![0.4, 0.2, 0.1]),
+        ),
+        sphere(v3![0.0, 1.0, 0.0], 1.0, mat::dielectric(1.5)),
+        sphere(v3![4.0, 1.0, 0.0], 1.0, mat::metal(v3![0.7, 0.6, 0.5], 0.0)),
+    ]
+    .into_iter()
+    .chain(
+        (-ball_density..ball_density)
+            .cartesian_product(-ball_density..ball_density)
+            .filter_map(|(a, b)| generate_center(a as f64, b as f64))
+            .map(|center| {
+                sphere(
+                    center,
+                    0.2,
+                    match utils::rand() {
+                        choose_mat if choose_mat < 0.8 => {
+                            mat::lambertian(Vec3::rand() * Vec3::rand())
+                        },
+                        choose_mat if choose_mat < 0.95 => {
+                            mat::metal(
+                                (Vec3::rand() + 1.0) * 0.5,
+                                0.5 * utils::rand(),
+                            )
+                        },
+                        _ => mat::dielectric(1.5),
+                    },
+                )
+            }),
+    )
+    .collect::<Vec<_>>();
 
     box HittableList::new(list)
 }
 
-fn color(ray: &Ray, world: &Hittable, depth: usize) -> Vec3 {
-    if let Some(rec) = world.hit(&ray, 0.001, f64::MAX) {
-        if let Some((attenuation, scattered)) = rec.material().scatter(&ray, &rec) {
-            if depth < 50 {
-                attenuation * color(&scattered, world, depth + 1)
-            } else {
-                Vec3::zeros()
-            }
-        } else {
-            Vec3::zeros()
-        }
-    } else {
-        Vec3::ones().lerp(
-            vec3![0.5, 0.7, 1.0],
-            0.5 * (ray.direction().unitize().y() + 1.0),
-        )
-    }
+fn color(ray: &ray::Ray, world: &dyn Hittable, depth: usize) -> Vec3 {
+    world.hit(&ray, 0.001, f64::MAX).map_or_else(
+        || {
+            Vec3::ones().lerp(
+                v3![0.5, 0.7, 1.0],
+                0.5 * (ray.direction().unitize().y() + 1.0),
+            )
+        },
+        |rec| {
+            rec.material().scatter(&ray, &rec).map_or(
+                Vec3::zeros(),
+                |(attenuation, scattered)| {
+                    if depth < 50 {
+                        attenuation * color(&scattered, world, depth + 1)
+                    } else {
+                        Vec3::zeros()
+                    }
+                },
+            )
+        },
+    )
 }
 
 fn main() {
@@ -165,65 +182,72 @@ fn main() {
                 .required(false),
         );
     let matches = app.get_matches();
-    let dims: Vec<usize> = matches
+    let dims = matches
         .values_of("imagedims")
         .unwrap_or_default()
-        .map(|f| f.parse().unwrap())
-        .collect();
+        .map(|s| {
+            s.parse()
+                .expect(format!("Invalid usize value {}", s).as_str())
+        })
+        .collect::<Vec<usize>>();
     let ndims = dims.len();
     if ndims != 2 {
-        panic!(
-            "{} image dimensions given, must give exactly 2 as MxN",
-            ndims
-        );
+        println!("The argument '{}' isn't a valid value", ndims);
+        return;
     }
 
     let (width, height) = (dims[0], dims[1]);
-    let nsamples: usize = matches
+    let nsamples = matches
         .value_of("samples")
         .unwrap_or_default()
-        .parse()
-        .expect("Unable to parse samples value");
-    let gamma: f64 = matches
+        .parse::<usize>()
+        .expect("Invalid usize value");
+    let gamma = matches
         .value_of("gamma")
         .unwrap_or_default()
-        .parse()
-        .expect("Unable to parse gamma value");
-    let ball_density: isize = matches
+        .parse::<f64>()
+        .expect("Invalid f64 value");
+    let ball_density = matches
         .value_of("ball_density")
         .unwrap_or_default()
-        .parse()
-        .expect("Unable to parse ball density");
+        .parse::<isize>()
+        .expect("Invalid isize value");
     let lookfrom: Vec3 = matches
         .values_of("lookfrom")
         .unwrap_or_default()
-        .map(|f| f.parse().unwrap())
+        .map(|s| {
+            s.parse()
+                .expect(format!("Invalid f64 value {}", s).as_str())
+        })
         .collect();
     let lookat: Vec3 = matches
         .values_of("lookat")
         .unwrap_or_default()
-        .map(|a| a.parse().unwrap())
+        .map(|s| {
+            s.parse()
+                .expect(format!("Invalid f64 value {}", s).as_str())
+        })
         .collect();
-    let aperture: f64 = matches
+    let aperture = matches
         .value_of("aperture")
         .unwrap_or_default()
-        .parse()
-        .expect("Unable parse aperture argument");
-    let filename: &str = matches
+        .parse::<f64>()
+        .expect("Invalid f64 value");
+    let filename = matches
         .value_of("filename")
-        .expect("Unable to retrive value of filename argument");
-    let dist_to_focus: f64 = matches
+        .expect("Missing filename argument");
+    let dist_to_focus = matches
         .value_of("dist_to_focus")
         .unwrap_or(&(lookfrom - lookat).norm().to_string())
-        .parse()
-        .expect("Unable to parse value of distance to focus argument");
+        .parse::<f64>()
+        .expect("");
     let fwidth = width as f64;
     let fheight = height as f64;
 
-    let camera = Camera::new(
+    let camera = camera::Camera::new(
         lookfrom,
         lookat,
-        vec3![0, 1, 0],
+        v3![0.0, 1.0, 0.0],
         20.0,
         fwidth / fheight,
         aperture,
@@ -237,11 +261,13 @@ fn main() {
             .progress_chars("##-"),
     );
 
-    let mut file = File::create(filename).expect("Unable to create file");
+    let mut file = File::create(filename).expect("Unable to open file");
 
-    writeln!(file, "P3").expect("Unable to write PPM header");
-    writeln!(file, "{} {}", width, height).expect("Unable to write width and height to PPM");
-    writeln!(file, "255").expect("Unable to write max pixel color value to PPM");
+    writeln!(file, "P3").expect("Unable to write header line P3");
+    writeln!(file, "{} {}", width, height).expect(
+        format!("Unable to write header line {} {}", width, height).as_str(),
+    );
+    writeln!(file, "255").expect("Unable to write header line 255");
 
     let gamma = 1.0 / gamma;
 
@@ -249,12 +275,13 @@ fn main() {
         .into_par_iter()
         .flat_map(|y| {
             let fy = (height - y) as f64;
-            let mut res: Vec<(usize, (u8, u8, u8))> = Vec::with_capacity(width);
+            let mut row = Vec::with_capacity(width);
             for x in 0..width {
+                let fx = x as f64;
                 let col = (0..nsamples)
                     .map(|_| {
-                        let u = (x as f64 + rand()) / fwidth;
-                        let v = (fy + rand()) / fheight;
+                        let u = (fx + utils::rand()) / fwidth;
+                        let v = (fy + utils::rand()) / fheight;
                         let ray = camera.ray(u, v);
                         color(&ray, world, 0)
                     })
@@ -262,15 +289,18 @@ fn main() {
                     .div(nsamples as f64)
                     .powf(gamma);
                 pb.inc(nsamples as u64);
-                let value = (y * width + x, (col.r(), col.g(), col.b()));
-                res.push(value);
+                row.push((y * width + x, col.r(), col.g(), col.b()));
             }
-            res
+            row
         })
         .collect::<Vec<_>>();
-    rows.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-    for (_, (r, g, b)) in rows {
-        writeln!(file, "{} {} {}", r, g, b).expect("Unable to write pixel");
+    rows.sort_by(|(left, ..), (right, ..)| left.cmp(right));
+    for (i, r, g, b) in rows {
+        let line = format!("{} {} {}", r, g, b);
+        writeln!(file, "{}", line).expect(
+            format!("Unable to write pixel at row {} with value {}", i, line)
+                .as_str(),
+        );
     }
     pb.finish();
 }

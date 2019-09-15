@@ -1,14 +1,14 @@
-use hitrecord::HitRecord;
-use ray::Ray;
+use crate::hitrecord::HitRecord;
+use crate::ray::Ray;
+use crate::utils;
+use crate::vec3::Vec3;
 use std::marker::Sync;
-use utils;
-use vec3::Vec3;
 
 pub trait RawMaterial: Sync {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)>;
 }
 
-pub type Material = Box<RawMaterial>;
+pub type Material = Box<dyn RawMaterial>;
 
 #[derive(Debug, PartialEq)]
 struct Lambertian {
@@ -18,7 +18,7 @@ struct Lambertian {
 impl RawMaterial for Lambertian {
     fn scatter(&self, _: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
         let point = rec.point();
-        let target = point + rec.normal() + utils::random_in_unit_sphere();
+        let target = point + rec.normal() + Vec3::rand_in_sphere();
         let scattered = Ray::new(point, target - point);
         Some((self.albedo, scattered))
     }
@@ -39,7 +39,7 @@ impl RawMaterial for Metal {
         let reflected = r_in.direction().unitize().reflect(rec.normal());
         let scattered = Ray::new(
             rec.point(),
-            reflected + self.fuzz * utils::random_in_unit_sphere(),
+            reflected + self.fuzz * Vec3::rand_in_sphere(),
         );
         if scattered.direction().dot(rec.normal()) > 0.0 {
             Some((self.albedo, scattered))
@@ -76,16 +76,22 @@ impl RawMaterial for Dielectric {
             (rec_normal, 1.0 / ref_idx, -1.0)
         };
 
-        let direction = if let Some(refracted) = dir.refract(outward_normal, ni_over_nt) {
-            if utils::rand() < utils::schlick(factor * dir_dot_normal / dir_length, ref_idx) {
-                reflected
-            } else {
-                refracted
-            }
-        } else {
-            reflected
-        };
-        Some((vec3![1, 1, 1], Ray::new(rec.point(), direction)))
+        let direction = dir.refract(outward_normal, ni_over_nt).map_or(
+            reflected,
+            |refracted| {
+                if utils::rand()
+                    < utils::schlick(
+                        factor * dir_dot_normal / dir_length,
+                        ref_idx,
+                    )
+                {
+                    reflected
+                } else {
+                    refracted
+                }
+            },
+        );
+        Some((Vec3::ones(), Ray::new(rec.point(), direction)))
     }
 }
 
