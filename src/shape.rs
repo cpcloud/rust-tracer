@@ -69,21 +69,13 @@ pub fn sphere(
     }
 }
 
-pub struct HittableList {
-    items: Vec<Box<dyn Hittable>>,
-}
-
-impl HittableList {
-    pub fn new(items: Vec<Box<dyn Hittable>>) -> HittableList {
-        HittableList { items }
-    }
-}
+pub type HittableList = Vec<Box<dyn Hittable>>;
 
 impl Hittable for HittableList {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let mut closest_so_far = t_max;
         let mut rec = None;
-        for item in &self.items {
+        for item in self.iter() {
             if let Some(temp_rec) = item.hit(ray, t_min, closest_so_far) {
                 closest_so_far = temp_rec.t();
                 rec = Some(temp_rec);

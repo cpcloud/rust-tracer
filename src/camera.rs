@@ -2,6 +2,7 @@ use crate::ray::Ray;
 use crate::vec3::{GeomVec, Vec3};
 use std::f64;
 
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Camera {
     origin: Vec3,
     lower_left_corner: Vec3,

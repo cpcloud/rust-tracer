@@ -9,26 +9,22 @@ pub trait RawMaterial: Sync {
 }
 
 pub type Material = Box<dyn RawMaterial>;
-
-#[derive(Debug, PartialEq)]
-struct Lambertian {
-    albedo: Vec3,
-}
+pub type Lambertian = Vec3;
 
 impl RawMaterial for Lambertian {
     fn scatter(&self, _: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
         let point = rec.point();
         let target = point + rec.normal() + Vec3::rand_in_sphere();
         let scattered = Ray::new(point, target - point);
-        Some((self.albedo, scattered))
+        Some((*self, scattered))
     }
 }
 
 pub fn lambertian(albedo: Vec3) -> Material {
-    box Lambertian { albedo }
+    box albedo
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 struct Metal {
     albedo: Vec3,
     fuzz: f64,
@@ -56,10 +52,7 @@ pub fn metal(albedo: Vec3, fuzz: f64) -> Material {
     }
 }
 
-#[derive(Debug, PartialEq)]
-struct Dielectric {
-    ref_idx: f64,
-}
+pub type Dielectric = f64;
 
 impl RawMaterial for Dielectric {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
@@ -68,7 +61,7 @@ impl RawMaterial for Dielectric {
         let rec_normal = rec.normal();
         let reflected = dir.reflect(rec_normal);
         let dir_dot_normal = dir.dot(rec_normal);
-        let ref_idx = self.ref_idx;
+        let ref_idx = *self;
 
         let (outward_normal, ni_over_nt, factor) = if dir_dot_normal > 0.0 {
             (-rec_normal, ref_idx, ref_idx)
@@ -95,6 +88,6 @@ impl RawMaterial for Dielectric {
     }
 }
 
-pub fn dielectric(ref_idx: f64) -> Material {
-    box Dielectric { ref_idx }
+pub fn dielectric(ref_idx: Dielectric) -> Material {
+    box ref_idx
 }

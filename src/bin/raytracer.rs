@@ -6,7 +6,7 @@ use rayon::prelude::*;
 
 use itertools::Itertools;
 
-use raytracer::shape::{sphere, Hittable, HittableList};
+use raytracer::shape::{sphere, Hittable};
 use raytracer::vec3::{ColorVec, GeomVec, Vec3};
 use raytracer::{camera, mat, ray, utils, v3};
 
@@ -27,7 +27,7 @@ fn generate_center(a: f64, b: f64) -> Option<Vec3> {
 
 fn random_scene(ball_density: isize) -> Box<dyn Hittable> {
     assert!(ball_density >= 0);
-    let list = vec![
+    box vec![
         sphere(
             v3![0.0, -1000.0, 0.0],
             1000.0,
@@ -65,9 +65,7 @@ fn random_scene(ball_density: isize) -> Box<dyn Hittable> {
                 )
             }),
     )
-    .collect::<Vec<_>>();
-
-    box HittableList::new(list)
+    .collect::<Vec<_>>()
 }
 
 fn color(ray: &ray::Ray, world: &dyn Hittable, depth: usize) -> Vec3 {
