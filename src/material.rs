@@ -1,21 +1,16 @@
-use hitrecord::HitRecord;
-use ray::Ray;
+use crate::{hitrecord::HitRecord, ray::Ray, utils, vec3::Vec3};
 use std::marker::Sync;
-use utils;
-use vec3::Vec3;
 
-pub trait RawMaterial: Sync {
+pub trait Material: Sync {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)>;
 }
-
-pub type Material = Box<RawMaterial>;
 
 #[derive(Debug, PartialEq)]
 struct Lambertian {
     albedo: Vec3,
 }
 
-impl RawMaterial for Lambertian {
+impl Material for Lambertian {
     fn scatter(&self, _: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
         let point = rec.point();
         let target = point + rec.normal() + utils::random_in_unit_sphere();
@@ -24,8 +19,8 @@ impl RawMaterial for Lambertian {
     }
 }
 
-pub fn lambertian(albedo: Vec3) -> Material {
-    box Lambertian { albedo }
+pub fn lambertian(albedo: Vec3) -> Box<dyn Material> {
+    Box::new(Lambertian { albedo })
 }
 
 #[derive(Debug, PartialEq)]
@@ -34,7 +29,7 @@ struct Metal {
     fuzz: f64,
 }
 
-impl RawMaterial for Metal {
+impl Material for Metal {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
         let reflected = r_in.direction().unitize().reflect(rec.normal());
         let scattered = Ray::new(
@@ -49,11 +44,11 @@ impl RawMaterial for Metal {
     }
 }
 
-pub fn metal(albedo: Vec3, fuzz: f64) -> Material {
-    box Metal {
+pub fn metal(albedo: Vec3, fuzz: f64) -> Box<dyn Material> {
+    Box::new(Metal {
         albedo,
         fuzz: fuzz.min(1.0),
-    }
+    })
 }
 
 #[derive(Debug, PartialEq)]
@@ -61,7 +56,7 @@ struct Dielectric {
     ref_idx: f64,
 }
 
-impl RawMaterial for Dielectric {
+impl Material for Dielectric {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
         let dir = r_in.direction();
         let dir_length = dir.norm();
@@ -89,6 +84,6 @@ impl RawMaterial for Dielectric {
     }
 }
 
-pub fn dielectric(ref_idx: f64) -> Material {
-    box Dielectric { ref_idx }
+pub fn dielectric(ref_idx: f64) -> Box<dyn Material> {
+    Box::new(Dielectric { ref_idx })
 }

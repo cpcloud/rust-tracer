@@ -1,22 +1,19 @@
 use super::mat::Material;
-use hitrecord::HitRecord;
-use ray::Ray;
-use std::f64;
-use std::marker::Sync;
-use vec3::Vec3;
+use crate::{hitrecord::HitRecord, ray::Ray, vec3::Vec3};
+use std::{f64, marker::Sync};
 
 pub trait Hittable: Sync {
-    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
+    fn hit(&self, ray: Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
 }
 
 struct Sphere {
     center: Vec3,
     radius: f64,
-    material: Material,
+    material: Box<dyn Material>,
 }
 
 impl Hittable for Sphere {
-    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+    fn hit(&self, ray: Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let radius = self.radius;
         let center = self.center;
 
@@ -31,12 +28,22 @@ impl Hittable for Sphere {
             let t = (-b - disc_sqrt) / a;
             if t < t_max && t > t_min {
                 let point = ray.point(t);
-                Some(HitRecord::new(t, point, (point - center) / radius, &self.material))
+                Some(HitRecord::new(
+                    t,
+                    point,
+                    (point - center) / radius,
+                    &*self.material,
+                ))
             } else {
                 let t = (-b + disc_sqrt) / a;
                 if t < t_max && t > t_min {
                     let point = ray.point(t);
-                    Some(HitRecord::new(t, point, (point - center) / radius, &self.material))
+                    Some(HitRecord::new(
+                        t,
+                        point,
+                        (point - center) / radius,
+                        &*self.material,
+                    ))
                 } else {
                     None
                 }
@@ -47,26 +54,26 @@ impl Hittable for Sphere {
     }
 }
 
-pub fn sphere(center: Vec3, radius: f64, material: Material) -> Box<Hittable> {
-    box Sphere {
+pub fn sphere(center: Vec3, radius: f64, material: Box<dyn Material>) -> impl Hittable {
+    Sphere {
         center,
         radius,
         material,
     }
 }
 
-pub struct HittableList {
-    items: Vec<Box<Hittable>>,
+pub struct HittableList<H> {
+    items: Vec<H>,
 }
 
-impl HittableList {
-    pub fn new(items: Vec<Box<Hittable>>) -> HittableList {
-        HittableList { items }
+impl<H> HittableList<H> {
+    pub fn new(items: Vec<H>) -> Self {
+        Self { items }
     }
 }
 
-impl Hittable for HittableList {
-    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+impl<H: Hittable> Hittable for HittableList<H> {
+    fn hit(&self, ray: Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let mut rec: Option<HitRecord> = None;
         let mut closest_so_far = t_max;
 

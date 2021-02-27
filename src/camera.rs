@@ -1,7 +1,9 @@
-use ray::Ray;
+use crate::{
+    ray::Ray,
+    utils::rand,
+    vec3::{GeomVec, Vec3},
+};
 use std::f64;
-use utils::rand;
-use vec3::{GeomVec, Vec3};
 
 pub struct Camera {
     origin: Vec3,

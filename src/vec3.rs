@@ -1,5 +1,7 @@
-use std::iter::{FromIterator, Sum};
-use std::ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, Neg, Sub};
+use std::{
+    iter::{FromIterator, Sum},
+    ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, Neg, Sub},
+};
 
 pub trait GeomVec {
     fn x(&self) -> f64;
@@ -33,7 +35,9 @@ impl Vec3 {
         3usize
     }
 
-    pub const fn is_empty(&self) -> bool { false }
+    pub const fn is_empty(&self) -> bool {
+        false
+    }
 
     pub const fn zeros() -> Self {
         ZEROS
@@ -106,13 +110,6 @@ impl Vec3 {
         } else {
             None
         }
-    }
-}
-
-#[macro_export]
-macro_rules! vec3 {
-    [$x:expr, $y:expr, $z:expr] => {
-        Vec3::new(($x) as f64, ($y) as f64, ($z) as f64)
     }
 }
 
@@ -201,7 +198,7 @@ fn test_len() {
 
 #[test]
 fn test_is_empty() {
-    let u = vec3![0, 0, 0];
+    let u = crate::vec3![0, 0, 0];
     assert_eq!(u.is_empty(), false);
 }
 
