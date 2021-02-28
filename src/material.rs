@@ -1,42 +1,52 @@
-use crate::{hitrecord::HitRecord, ray::Ray, utils, vec3::Vec3};
-use std::marker::Sync;
+use crate::{ray::Ray, utils, vec3::Vec3, HitRecord};
 
-pub trait Material: Sync {
+pub trait Material {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)>;
 }
 
 #[derive(Debug, PartialEq)]
-struct Lambertian {
+pub struct Lambertian {
     albedo: Vec3,
+}
+
+impl Lambertian {
+    pub fn new(albedo: Vec3) -> Self {
+        Self { albedo }
+    }
 }
 
 impl Material for Lambertian {
     fn scatter(&self, _: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
-        let point = rec.point();
-        let target = point + rec.normal() + utils::random_in_unit_sphere();
+        let point = rec.point;
+        let target = point + rec.normal + utils::random_in_unit_sphere();
         let scattered = Ray::new(point, target - point);
         Some((self.albedo, scattered))
     }
 }
 
-pub fn lambertian(albedo: Vec3) -> Box<dyn Material> {
-    Box::new(Lambertian { albedo })
-}
-
 #[derive(Debug, PartialEq)]
-struct Metal {
+pub struct Metal {
     albedo: Vec3,
     fuzz: f64,
 }
 
+impl Metal {
+    pub fn new(albedo: Vec3, fuzz: f64) -> Self {
+        Self {
+            albedo,
+            fuzz: fuzz.min(1.0),
+        }
+    }
+}
+
 impl Material for Metal {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
-        let reflected = r_in.direction().unitize().reflect(rec.normal());
+        let reflected = r_in.direction().unitize().reflect(rec.normal);
         let scattered = Ray::new(
-            rec.point(),
+            rec.point,
             reflected + self.fuzz * utils::random_in_unit_sphere(),
         );
-        if scattered.direction().dot(rec.normal()) > 0.0 {
+        if scattered.direction().dot(rec.normal) > 0.0 {
             Some((self.albedo, scattered))
         } else {
             None
@@ -44,23 +54,22 @@ impl Material for Metal {
     }
 }
 
-pub fn metal(albedo: Vec3, fuzz: f64) -> Box<dyn Material> {
-    Box::new(Metal {
-        albedo,
-        fuzz: fuzz.min(1.0),
-    })
+#[derive(Debug, PartialEq)]
+pub struct Dielectric {
+    ref_idx: f64,
 }
 
-#[derive(Debug, PartialEq)]
-struct Dielectric {
-    ref_idx: f64,
+impl Dielectric {
+    pub fn new(ref_idx: f64) -> Self {
+        Self { ref_idx }
+    }
 }
 
 impl Material for Dielectric {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
         let dir = r_in.direction();
         let dir_length = dir.norm();
-        let rec_normal = rec.normal();
+        let rec_normal = rec.normal;
         let reflected = dir.reflect(rec_normal);
         let dir_dot_normal = dir.dot(rec_normal);
         let ref_idx = self.ref_idx;
@@ -80,10 +89,6 @@ impl Material for Dielectric {
         } else {
             reflected
         };
-        Some((vec3![1, 1, 1], Ray::new(rec.point(), direction)))
+        Some((vec3![1, 1, 1], Ray::new(rec.point, direction)))
     }
-}
-
-pub fn dielectric(ref_idx: f64) -> Box<dyn Material> {
-    Box::new(Dielectric { ref_idx })
 }

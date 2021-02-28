@@ -1,27 +1,24 @@
+use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use raytracer::{
-    camera::Camera,
-    mat,
-    ray::Ray,
-    shape::{sphere, Hittable, HittableList},
     utils::{rand, randvec},
-    vec3,
-    vec3::{ColorVec, GeomVec, Vec3},
+    vec3, Camera, ColorVec, Dielectric, GeomVec, Hittable, HittableList, Lambertian, Metal, Ray,
+    Sphere, Vec3,
 };
-use std::{f64, fs::File, io::Write, iter::Iterator, ops::Div};
+use std::{fs::File, io::Write, ops::Div};
 use structopt::StructOpt;
 
 fn random_scene(ball_density: isize) -> impl Hittable {
     let mut list = vec![
-        sphere(
+        Sphere::new(
             vec3![0, -1000, 0],
             1000.0,
-            mat::lambertian(vec3![0.5, 0.5, 0.5]),
+            Lambertian::new(vec3![0.5, 0.5, 0.5]),
         ),
-        sphere(vec3![-4, 1, 0], 1.0, mat::lambertian(vec3![0.4, 0.2, 0.1])),
-        sphere(vec3![0, 1, 0], 1.0, mat::dielectric(1.5)),
-        sphere(vec3![4, 1, 0], 1.0, mat::metal(vec3![0.7, 0.6, 0.5], 0.0)),
+        Sphere::new(vec3![-4, 1, 0], 1.0, Lambertian::new(vec3![0.4, 0.2, 0.1])),
+        Sphere::new(vec3![0, 1, 0], 1.0, Dielectric::new(1.5)),
+        Sphere::new(vec3![4, 1, 0], 1.0, Metal::new(vec3![0.7, 0.6, 0.5], 0.0)),
     ];
     list.reserve(ball_density.pow(2) as usize);
 
@@ -31,15 +28,15 @@ fn random_scene(ball_density: isize) -> impl Hittable {
             let center = vec3![a as f64 + 0.9 * rand(), 0.2, b as f64 + 0.9 * rand()];
             if (center - vec3![4, 0.2, 0]).norm() > 0.9 {
                 list.push(if choose_mat < 0.8 {
-                    sphere(center, 0.2, mat::lambertian(randvec() * randvec()))
+                    Sphere::new(center, 0.2, Lambertian::new(randvec() * randvec()))
                 } else if choose_mat < 0.95 {
-                    sphere(
+                    Sphere::new(
                         center,
                         0.2,
-                        mat::metal((randvec() + 1.0) * 0.5, 0.5 * rand()),
+                        Metal::new((randvec() + 1.0) * 0.5, 0.5 * rand()),
                     )
                 } else {
-                    sphere(center, 0.2, mat::dielectric(1.5))
+                    Sphere::new(center, 0.2, Dielectric::new(1.5))
                 });
             }
         }
@@ -50,7 +47,7 @@ fn random_scene(ball_density: isize) -> impl Hittable {
 
 fn color(ray: Ray, world: &impl Hittable, depth: usize) -> Vec3 {
     if let Some(rec) = world.hit(ray, 0.001, f64::MAX) {
-        if let Some((attenuation, scattered)) = rec.material().scatter(&ray, &rec) {
+        if let Some((attenuation, scattered)) = rec.material.scatter(&ray, &rec) {
             if depth < 50 {
                 attenuation * color(scattered, world, depth + 1)
             } else {
@@ -97,7 +94,7 @@ struct Opt {
     dist_to_focus: f64,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let Opt {
         image_dims,
         nsamples,
@@ -128,11 +125,11 @@ fn main() {
             .progress_chars("##-"),
     );
 
-    let mut file = File::create(filename).expect("Unable to create file");
+    let mut file = File::create(filename).context("Unable to create file")?;
 
-    writeln!(file, "P3").expect("Unable to write PPM header");
-    writeln!(file, "{} {}", width, height).expect("Unable to write width and height to PPM");
-    writeln!(file, "255").expect("Unable to write max pixel color value to PPM");
+    writeln!(file, "P3").context("Unable to write PPM header")?;
+    writeln!(file, "{} {}", width, height).context("Unable to write width and height to PPM")?;
+    writeln!(file, "255").context("Unable to write max pixel color value to PPM")?;
 
     let gamma = gamma.recip();
 
@@ -144,7 +141,7 @@ fn main() {
             for x in 0..width {
                 let col = (0..nsamples)
                     .map(|_| {
-                        let u = (x as f64 + rand()) / f64::from(width);
+                        let u = (f64::from(x) + rand()) / f64::from(width);
                         let v = (fy + rand()) / f64::from(height);
                         color(camera.ray(u, v), &world, 0)
                     })
@@ -152,14 +149,16 @@ fn main() {
                     .div(f64::from(nsamples))
                     .powf(gamma);
                 pb.inc(u64::from(nsamples));
-                res.push((usize::from(y * width + x), (col.r(), col.g(), col.b())));
+                res.push((y * width + x, (col.r(), col.g(), col.b())));
             }
             res
         })
         .collect::<Vec<_>>();
     rows.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-    for (_, (r, g, b)) in rows {
-        writeln!(file, "{} {} {}", r, g, b).expect("Unable to write pixel");
+    for (row_index, (r, g, b)) in rows {
+        writeln!(file, "{} {} {}", r, g, b)
+            .with_context(|| format!("Unable to write pixel at row: {}", row_index))?;
     }
     pb.finish();
+    Ok(())
 }

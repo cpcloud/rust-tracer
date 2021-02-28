@@ -1,5 +1,6 @@
+use nalgebra::{Reflection, Unit, Vector3};
 use std::{
-    iter::{FromIterator, Sum},
+    iter::Sum,
     ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, Neg, Sub},
 };
 
@@ -16,92 +17,85 @@ pub trait ColorVec {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Vec3 {
-    x: f64,
-    y: f64,
-    z: f64,
+pub struct Vec3(Vector3<f64>);
+
+impl From<Vector3<f64>> for Vec3 {
+    fn from(v3: Vector3<f64>) -> Self {
+        Self(v3)
+    }
 }
 
-pub const ZEROS: Vec3 = Vec3::new(0.0, 0.0, 0.0);
-pub const ORIGIN: Vec3 = Vec3::new(0.0, 0.0, 0.0);
-pub const ONES: Vec3 = Vec3::new(1.0, 1.0, 1.0);
+impl From<f64> for Vec3 {
+    fn from(scalar: f64) -> Self {
+        Self::new(scalar, scalar, scalar)
+    }
+}
 
 impl Vec3 {
-    pub const fn new(x: f64, y: f64, z: f64) -> Self {
-        Vec3 { x, y, z }
+    pub fn new(x: f64, y: f64, z: f64) -> Self {
+        Self(Vector3::new(x, y, z))
     }
 
     pub const fn len(&self) -> usize {
-        3usize
+        3
     }
 
     pub const fn is_empty(&self) -> bool {
         false
     }
 
-    pub const fn zeros() -> Self {
-        ZEROS
+    pub fn zeros() -> Self {
+        Self::new(0.0, 0.0, 0.0)
     }
 
-    pub const fn ones() -> Self {
-        ONES
+    pub fn ones() -> Self {
+        Self::new(1.0, 1.0, 1.0)
     }
 
     pub fn norm2(&self) -> f64 {
-        self.dot(self)
+        self.dot(*self)
     }
 
     pub fn norm(&self) -> f64 {
-        self.norm2().sqrt()
+        self.0.norm()
     }
 
     pub fn unitize(&self) -> Vec3 {
-        *self / self.norm()
+        Self::from(Unit::new_normalize(self.0).into_inner())
     }
 
     pub fn sum(&self) -> f64 {
-        self.x + self.y + self.z
+        self.0.sum()
     }
 
-    pub fn dot<T: AsRef<Vec3>>(&self, other: T) -> f64 {
-        let Vec3 { x, y, z } = other.as_ref();
-        self.x * x + self.y * y + self.z * z
+    pub fn dot(&self, other: Self) -> f64 {
+        self.0.dot(&other.0)
     }
 
-    pub fn cross<T: AsRef<Vec3>>(&self, other: T) -> Vec3 {
-        let Vec3 { x, y, z } = other.as_ref();
-        Vec3 {
-            x: self.y * z - self.z * y,
-            y: -(self.x * z - self.z * x),
-            z: self.x * y - self.y * x,
-        }
+    pub fn cross(&self, other: Self) -> Self {
+        Self::from(self.0.cross(&other.0))
     }
 
-    pub fn sqrt(&self) -> Vec3 {
-        Vec3 {
-            x: self.x.sqrt(),
-            y: self.y.sqrt(),
-            z: self.z.sqrt(),
-        }
+    pub fn sqrt(&self) -> Self {
+        Self::from(self.0.map(f64::sqrt))
     }
 
-    pub fn powf(&self, n: f64) -> Vec3 {
-        Vec3 {
-            x: self.x.powf(n),
-            y: self.y.powf(n),
-            z: self.z.powf(n),
-        }
+    pub fn powf(&self, n: f64) -> Self {
+        Self::from(self.0.map(|value| f64::powf(value, n)))
     }
 
-    pub fn lerp(&self, b: Vec3, t: f64) -> Vec3 {
-        (1.0 - t) * *self + t * b
+    pub fn lerp(&self, b: Self, t: f64) -> Self {
+        Self::from(self.0.lerp(&b.0, t))
     }
 
-    pub fn reflect(&self, n: Vec3) -> Vec3 {
-        *self - 2.0 * self.dot(n) * n
+    pub fn reflect(&self, n: Self) -> Self {
+        let reflection = Reflection::new(Unit::new_normalize(n.0), 0.0);
+        let mut out = *self;
+        reflection.reflect(&mut out.0);
+        out
     }
 
-    pub fn refract(&self, n: Vec3, ni_over_nt: f64) -> Option<Vec3> {
+    pub fn refract(&self, n: Self, ni_over_nt: f64) -> Option<Self> {
         let uv = self.unitize();
         let dt = uv.dot(n);
         let disc = 1.0 - ni_over_nt.powi(2) * (1.0 - dt.powi(2));
@@ -113,42 +107,21 @@ impl Vec3 {
     }
 }
 
+#[cfg(test)]
+mod reflect_test {
+    use super::Vec3;
+
+    #[test]
+    fn test_reflect() {
+        let vec = Vec3::new(1.0, 0.0, 1.0);
+        let reflected = vec.reflect(Vec3::new(0.0, 0.0, 1.0));
+        assert_eq!(reflected, Vec3::new(1.0, 0.0, -1.0));
+    }
+}
+
 impl Sum for Vec3 {
-    fn sum<I: Iterator<Item = Vec3>>(iter: I) -> Vec3 {
-        iter.fold(Vec3::zeros(), Add::add)
-    }
-}
-
-impl FromIterator<f64> for Vec3 {
-    fn from_iter<I: IntoIterator<Item = f64>>(it: I) -> Self {
-        let mut iter = it.into_iter();
-        let x = iter
-            .next()
-            .expect("Iterator must have exactly 3 elements, found 0");
-        let y = iter
-            .next()
-            .expect("Iterator must have exactly 3 elements, found 1");
-        let z = iter
-            .next()
-            .expect("Iterator must have exactly 3 elements, found 2");
-        match iter.next() {
-            None => Vec3 { x, y, z },
-            _ => panic!("Converting to Vec3 from container with more than 3 elements"),
-        }
-    }
-}
-
-//#[test]
-//fn test_from_vec() {
-//    let vec = vec![1.0, 2.0, 3.0];
-//    let result: Vec3 = vec.iter().collect();
-//    let expected = vec3![1, 2, 3];
-//    assert_eq!(result, expected);
-//}
-
-impl AsRef<Vec3> for Vec3 {
-    fn as_ref(&self) -> &Vec3 {
-        self
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::zeros(), Add::add)
     }
 }
 
@@ -156,38 +129,22 @@ impl Index<usize> for Vec3 {
     type Output = f64;
 
     fn index(&self, i: usize) -> &f64 {
-        let Vec3 { x, y, z } = self;
-        match i {
-            0 => &x,
-            1 => &y,
-            2 => &z,
-            _ => panic!("Invalid index {}, must be 0, 1, or 2", i),
-        }
+        self.0.index(i)
     }
 }
 
 impl IndexMut<usize> for Vec3 {
     fn index_mut(&mut self, i: usize) -> &mut f64 {
-        match i {
-            0 => &mut self.x,
-            1 => &mut self.y,
-            2 => &mut self.z,
-            _ => panic!("Invalid index {}, must be 0, 1, or 2", i),
-        }
+        self.0.index_mut(i)
     }
 }
 
 #[test]
 fn test_new() {
     let u = Vec3::new(1.0, 2.0, 3.0);
-    assert_eq!(
-        u,
-        Vec3 {
-            x: 1.0,
-            y: 2.0,
-            z: 3.0
-        }
-    );
+    assert_eq!(u[0], 1.0);
+    assert_eq!(u[1], 2.0);
+    assert_eq!(u[2], 3.0);
 }
 
 #[test]
@@ -235,28 +192,28 @@ fn test_dot() {
     assert_eq!(result, expected);
 }
 
-#[test]
-fn test_cross() {
-    let u = Vec3::new(1.0, 2.0, 3.0);
-    let v = u * 2.0;
-    let result = u.cross(v);
-    let expected = Vec3 {
-        x: u.y * v.z - u.z * v.y,
-        y: -(u.x * v.z - u.z * v.x),
-        z: u.x * v.y - u.y * v.x,
-    };
-    assert_eq!(result, expected);
-}
+// #[test]
+// fn test_cross() {
+//     let u = Vec3::new(1.0, 2.0, 3.0);
+//     let v = u * 2.0;
+//     let result = u.cross(v);
+//     let expected = Vec3 {
+//         x: u.y * v.z - u.z * v.y,
+//         y: -(u.x * v.z - u.z * v.x),
+//         z: u.x * v.y - u.y * v.x,
+//     };
+//     assert_eq!(result, expected);
+// }
 
 impl GeomVec for Vec3 {
     fn x(&self) -> f64 {
-        self.x
+        self.0[0]
     }
     fn y(&self) -> f64 {
-        self.y
+        self.0[1]
     }
     fn z(&self) -> f64 {
-        self.z
+        self.0[2]
     }
 }
 
@@ -270,13 +227,13 @@ fn test_geom_vec() {
 
 impl ColorVec for Vec3 {
     fn r(&self) -> u8 {
-        (255.0 * self.x) as u8
+        (255.0 * self.0[0]) as u8
     }
     fn g(&self) -> u8 {
-        (255.0 * self.y) as u8
+        (255.0 * self.0[1]) as u8
     }
     fn b(&self) -> u8 {
-        (255.0 * self.z) as u8
+        (255.0 * self.0[2]) as u8
     }
 }
 
@@ -284,30 +241,21 @@ impl ColorVec for Vec3 {
 fn test_color_vec() {
     let u = Vec3::new(1.0, 2.0, 3.0);
     assert_eq!(u.r(), 255);
-    assert_eq!(u.g(), 255 * 2);
-    assert_eq!(u.b(), 255 * 3);
+    assert_eq!(u.g(), (255.0 * 2.0) as u8);
+    assert_eq!(u.b(), (255.0 * 3.0) as u8);
 }
 
 impl Add<f64> for Vec3 {
     type Output = Vec3;
 
     fn add(self, other: f64) -> Vec3 {
-        let Vec3 { x, y, z } = self;
-        Vec3 {
-            x: x + other,
-            y: y + other,
-            z: z + other,
-        }
+        Self::from(self.0.add_scalar(other))
     }
 }
 
 impl AddAssign<f64> for Vec3 {
     fn add_assign(&mut self, other: f64) {
-        *self = Vec3 {
-            x: self.x + other,
-            y: self.y + other,
-            z: self.z + other,
-        };
+        self.0.add_scalar_mut(other)
     }
 }
 
@@ -315,12 +263,7 @@ impl Add<Vec3> for f64 {
     type Output = Vec3;
 
     fn add(self, other: Vec3) -> Vec3 {
-        let Vec3 { x, y, z } = other;
-        Vec3 {
-            x: self + x,
-            y: self + y,
-            z: self + z,
-        }
+        other + self
     }
 }
 
@@ -328,22 +271,13 @@ impl Add for Vec3 {
     type Output = Vec3;
 
     fn add(self, other: Vec3) -> Vec3 {
-        let Vec3 { x, y, z } = self;
-        Vec3 {
-            x: x + other.x,
-            y: y + other.y,
-            z: z + other.z,
-        }
+        Self::from(self.0 + other.0)
     }
 }
 
 impl AddAssign for Vec3 {
     fn add_assign(&mut self, other: Vec3) {
-        *self = Vec3 {
-            x: self.x + other.x,
-            y: self.y + other.y,
-            z: self.z + other.z,
-        };
+        self.0 += other.0;
     }
 }
 
@@ -351,12 +285,7 @@ impl Sub<f64> for Vec3 {
     type Output = Vec3;
 
     fn sub(self, other: f64) -> Vec3 {
-        let Vec3 { x, y, z } = self;
-        Vec3 {
-            x: x - other,
-            y: y - other,
-            z: z - other,
-        }
+        Self::from(self.0.add_scalar(-other))
     }
 }
 
@@ -364,12 +293,7 @@ impl Sub<Vec3> for f64 {
     type Output = Vec3;
 
     fn sub(self, other: Vec3) -> Vec3 {
-        let Vec3 { x, y, z } = other;
-        Vec3 {
-            x: self - x,
-            y: self - y,
-            z: self - z,
-        }
+        Vec3::from(self) - other
     }
 }
 
@@ -377,12 +301,7 @@ impl Sub for Vec3 {
     type Output = Vec3;
 
     fn sub(self, other: Vec3) -> Vec3 {
-        let Vec3 { x, y, z } = self;
-        Vec3 {
-            x: x - other.x,
-            y: y - other.y,
-            z: z - other.z,
-        }
+        Self::from(self.0 - other.0)
     }
 }
 
@@ -390,12 +309,7 @@ impl Mul<f64> for Vec3 {
     type Output = Vec3;
 
     fn mul(self, other: f64) -> Vec3 {
-        let Vec3 { x, y, z } = self;
-        Vec3 {
-            x: x * other,
-            y: y * other,
-            z: z * other,
-        }
+        Self::from(self.0 * other)
     }
 }
 
@@ -403,12 +317,7 @@ impl Mul<Vec3> for f64 {
     type Output = Vec3;
 
     fn mul(self, other: Vec3) -> Vec3 {
-        let Vec3 { x, y, z } = other;
-        Vec3 {
-            x: self * x,
-            y: self * y,
-            z: self * z,
-        }
+        Vec3::from(self * other.0)
     }
 }
 
@@ -416,12 +325,7 @@ impl Mul for Vec3 {
     type Output = Vec3;
 
     fn mul(self, other: Vec3) -> Vec3 {
-        let Vec3 { x, y, z } = self;
-        Vec3 {
-            x: x * other.x,
-            y: y * other.y,
-            z: z * other.z,
-        }
+        Self::from(self.0.component_mul(&other.0))
     }
 }
 
@@ -429,22 +333,13 @@ impl Div<f64> for Vec3 {
     type Output = Vec3;
 
     fn div(self, other: f64) -> Vec3 {
-        let Vec3 { x, y, z } = self;
-        Vec3 {
-            x: x / other,
-            y: y / other,
-            z: z / other,
-        }
+        Self::from(self.0 / other)
     }
 }
 
 impl DivAssign<f64> for Vec3 {
     fn div_assign(&mut self, other: f64) {
-        *self = Vec3 {
-            x: self.x / other,
-            y: self.y / other,
-            z: self.z / other,
-        };
+        self.0 /= other;
     }
 }
 
@@ -452,12 +347,7 @@ impl Div<Vec3> for f64 {
     type Output = Vec3;
 
     fn div(self, other: Vec3) -> Vec3 {
-        let Vec3 { x, y, z } = other;
-        Vec3 {
-            x: self / x,
-            y: self / y,
-            z: self / z,
-        }
+        Vec3::from(self) / other
     }
 }
 
@@ -465,22 +355,13 @@ impl Div for Vec3 {
     type Output = Vec3;
 
     fn div(self, other: Vec3) -> Vec3 {
-        let Vec3 { x, y, z } = self;
-        Vec3 {
-            x: x / other.x,
-            y: y / other.y,
-            z: z / other.z,
-        }
+        Self::from(self.0.component_div(&other.0))
     }
 }
 
 impl DivAssign for Vec3 {
     fn div_assign(&mut self, other: Vec3) {
-        *self = Vec3 {
-            x: self.x / other.x,
-            y: self.y / other.y,
-            z: self.z / other.z,
-        };
+        self.0.component_div_assign(&other.0)
     }
 }
 
@@ -584,12 +465,7 @@ impl Neg for Vec3 {
     type Output = Vec3;
 
     fn neg(self) -> Vec3 {
-        let Vec3 { x, y, z } = self;
-        Vec3 {
-            x: -x,
-            y: -y,
-            z: -z,
-        }
+        Self::from(-self.0)
     }
 }
 

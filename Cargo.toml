@@ -10,6 +10,8 @@ rand = "0.8"
 indicatif = "0.15"
 rayon = "1"
 structopt = "0.3"
+nalgebra = "0.24"
+anyhow = "1"
 
 [profile.release]
 opt-level = 3
