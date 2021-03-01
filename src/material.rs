@@ -1,5 +1,19 @@
 use crate::{ray::Ray, utils, vec3::Vec3, HitRecord};
 
+fn random_in_unit_sphere() -> Vec3 {
+    loop {
+        let p = 2.0 * utils::randvec() - Vec3::ones();
+        if p.norm2() < 1.0 {
+            return p;
+        }
+    }
+}
+
+pub(crate) fn schlick(cosine: f64, ref_idx: f64) -> f64 {
+    let r0 = ((1.0 - ref_idx) / (1.0 + ref_idx)).powi(2);
+    r0 + (1.0 - r0) * (1.0 - cosine).powi(5)
+}
+
 pub trait Material {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)>;
 }
@@ -18,7 +32,7 @@ impl Lambertian {
 impl Material for Lambertian {
     fn scatter(&self, _: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
         let point = rec.point;
-        let target = point + rec.normal + utils::random_in_unit_sphere();
+        let target = point + rec.normal + random_in_unit_sphere();
         let scattered = Ray::new(point, target - point);
         Some((self.albedo, scattered))
     }
@@ -42,10 +56,7 @@ impl Metal {
 impl Material for Metal {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord) -> Option<(Vec3, Ray)> {
         let reflected = r_in.direction().unitize().reflect(rec.normal);
-        let scattered = Ray::new(
-            rec.point,
-            reflected + self.fuzz * utils::random_in_unit_sphere(),
-        );
+        let scattered = Ray::new(rec.point, reflected + self.fuzz * random_in_unit_sphere());
         if scattered.direction().dot(rec.normal) > 0.0 {
             Some((self.albedo, scattered))
         } else {
@@ -81,7 +92,7 @@ impl Material for Dielectric {
         };
 
         let direction = if let Some(refracted) = dir.refract(outward_normal, ni_over_nt) {
-            if utils::rand() < utils::schlick(factor * dir_dot_normal / dir_length, ref_idx) {
+            if utils::rand() < schlick(factor * dir_dot_normal / dir_length, ref_idx) {
                 reflected
             } else {
                 refracted

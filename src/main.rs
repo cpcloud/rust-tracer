@@ -3,13 +3,13 @@ use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use raytracer::{
     utils::{rand, randvec},
-    vec3, Camera, ColorVec, Dielectric, GeomVec, Hittable, HittableList, Lambertian, Metal, Ray,
-    Sphere, Vec3,
+    vec3, Camera, ColorVec3, Dielectric, Hittable, HittableList, Lambertian, Metal, Ray, Sphere,
+    Vec3,
 };
 use std::{fs::File, io::Write, ops::Div};
 use structopt::StructOpt;
 
-fn random_scene(ball_density: isize) -> impl Hittable {
+fn random_scene(ball_density: i64) -> impl Hittable {
     let mut list = vec![
         Sphere::new(
             vec3![0, -1000, 0],
@@ -64,33 +64,53 @@ fn color(ray: Ray, world: &impl Hittable, depth: usize) -> Vec3 {
     }
 }
 
-#[derive(StructOpt)]
+#[derive(structopt::StructOpt)]
 struct Opt {
-    #[structopt(short, long, default_value = "400x200", value_delimiter = "x")]
+    #[structopt(
+        short,
+        long,
+        required = true,
+        default_value = "400x200",
+        value_delimiter = "x",
+        number_of_values = 1,
+        help = "Size of the image to produce"
+    )]
     image_dims: Vec<u16>,
 
-    #[structopt(short, long, default_value = "100")]
+    #[structopt(short, long, default_value = "100", help = "Number of samples")]
     nsamples: u32,
 
-    #[structopt(short, long, default_value = "2.0")]
+    #[structopt(short, long, default_value = "2.0", help = "Gamma")]
     gamma: f64,
 
     #[structopt(short, long, default_value = "11", help = "Density of balls")]
-    ball_density: isize,
+    ball_density: u32,
 
-    #[structopt(short, long, default_value = "13,2,3", value_delimiter = ",")]
+    #[structopt(
+        short,
+        long,
+        default_value = "13,2,3",
+        value_delimiter = ",",
+        help = "Origin of camera viewpoint"
+    )]
     look_from: Vec<f64>,
 
-    #[structopt(short, long, default_value = "0,0,0", value_delimiter = ",")]
+    #[structopt(
+        short,
+        long,
+        default_value = "0,0,0",
+        value_delimiter = ",",
+        help = "Where the camera is looking"
+    )]
     look_at: Vec<f64>,
 
-    #[structopt(short, long, default_value = "0.1")]
+    #[structopt(short, long, default_value = "0.1", help = "Aperture")]
     aperture: f64,
 
-    #[structopt(required = true)]
+    #[structopt(required = true, help = "Output filename")]
     filename: std::path::PathBuf,
 
-    #[structopt(short, long, default_value = "10.0")]
+    #[structopt(short, long, default_value = "10.0", help = "Distance to focus")]
     dist_to_focus: f64,
 }
 
@@ -109,15 +129,15 @@ fn main() -> Result<()> {
     let (width, height) = (image_dims[0], image_dims[1]);
 
     let camera = Camera::new(
-        vec3![look_from[0], look_from[1], look_from[2]],
-        vec3![look_at[0], look_at[1], look_at[2]],
+        look_from.into(),
+        look_at.into(),
         vec3![0, 1, 0],
         20.0,
         f64::from(width) / f64::from(height),
         aperture,
         dist_to_focus,
     );
-    let world = random_scene(ball_density);
+    let world = random_scene(i64::from(ball_density));
     let pb = ProgressBar::new(u64::from(u32::from(height) * u32::from(width) * nsamples));
     pb.set_style(
         ProgressStyle::default_bar()
@@ -149,13 +169,13 @@ fn main() -> Result<()> {
                     .div(f64::from(nsamples))
                     .powf(gamma);
                 pb.inc(u64::from(nsamples));
-                res.push((y * width + x, (col.r(), col.g(), col.b())));
+                res.push((y * width + x, ColorVec3::from(col).into_array()));
             }
             res
         })
         .collect::<Vec<_>>();
     rows.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-    for (row_index, (r, g, b)) in rows {
+    for (row_index, [r, g, b]) in rows {
         writeln!(file, "{} {} {}", r, g, b)
             .with_context(|| format!("Unable to write pixel at row: {}", row_index))?;
     }
