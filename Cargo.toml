@@ -12,6 +12,7 @@ rayon = "1"
 nalgebra = "0.24"
 anyhow = "1"
 structopt = "0.3"
+itertools = "0.10"
 
 [profile.release]
 opt-level = 3

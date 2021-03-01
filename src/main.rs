@@ -6,43 +6,49 @@ use raytracer::{
     vec3, Camera, ColorVec3, Dielectric, Hittable, HittableList, Lambertian, Metal, Ray, Sphere,
     Vec3,
 };
-use std::{fs::File, io::Write, ops::Div};
+use std::{
+    fs::File,
+    io::Write,
+    ops::{Add, Div},
+};
 use structopt::StructOpt;
 
-fn random_scene(ball_density: i64) -> impl Hittable {
-    let mut list = vec![
-        Sphere::new(
-            vec3![0, -1000, 0],
-            1000.0,
-            Lambertian::new(vec3![0.5, 0.5, 0.5]),
-        ),
-        Sphere::new(vec3![-4, 1, 0], 1.0, Lambertian::new(vec3![0.4, 0.2, 0.1])),
-        Sphere::new(vec3![0, 1, 0], 1.0, Dielectric::new(1.5)),
-        Sphere::new(vec3![4, 1, 0], 1.0, Metal::new(vec3![0.7, 0.6, 0.5], 0.0)),
-    ];
-    list.reserve(ball_density.pow(2) as usize);
+fn random_scene(ball_density: i32) -> impl Hittable {
+    HittableList::new(
+        vec![
+            Sphere::new(
+                vec3![0, -1000, 0],
+                1000.0,
+                Lambertian::new(vec3![0.5, 0.5, 0.5]),
+            ),
+            Sphere::new(vec3![-4, 1, 0], 1.0, Lambertian::new(vec3![0.4, 0.2, 0.1])),
+            Sphere::new(vec3![0, 1, 0], 1.0, Dielectric::new(1.5)),
+            Sphere::new(vec3![4, 1, 0], 1.0, Metal::new(vec3![0.7, 0.6, 0.5], 0.0)),
+        ]
+        .into_iter()
+        .chain(
+            itertools::iproduct!(-ball_density..ball_density, -ball_density..ball_density)
+                .filter_map(|(a, b)| {
+                    let center = vec3![a as f64 + 0.9 * rand(), 0.2, b as f64 + 0.9 * rand()];
+                    if (center - vec3![4, 0.2, 0]).norm() <= 0.9 {
+                        return None;
+                    }
 
-    for a in -ball_density..ball_density {
-        for b in -ball_density..ball_density {
-            let choose_mat = rand();
-            let center = vec3![a as f64 + 0.9 * rand(), 0.2, b as f64 + 0.9 * rand()];
-            if (center - vec3![4, 0.2, 0]).norm() > 0.9 {
-                list.push(if choose_mat < 0.8 {
-                    Sphere::new(center, 0.2, Lambertian::new(randvec() * randvec()))
-                } else if choose_mat < 0.95 {
-                    Sphere::new(
-                        center,
-                        0.2,
-                        Metal::new((randvec() + 1.0) * 0.5, 0.5 * rand()),
-                    )
-                } else {
-                    Sphere::new(center, 0.2, Dielectric::new(1.5))
-                });
-            }
-        }
-    }
-
-    HittableList::new(list)
+                    Some(match rand() {
+                        chosen if chosen < 0.8 => {
+                            Sphere::new(center, 0.2, Lambertian::new(randvec() * randvec()))
+                        }
+                        chosen if chosen < 0.95 => Sphere::new(
+                            center,
+                            0.2,
+                            Metal::new((randvec() + 1.0) * 0.5, 0.5 * rand()),
+                        ),
+                        _ => Sphere::new(center, 0.2, Dielectric::new(1.5)),
+                    })
+                }),
+        )
+        .collect::<Vec<_>>(),
+    )
 }
 
 fn color(ray: Ray, world: &impl Hittable, depth: usize) -> Vec3 {
@@ -84,7 +90,7 @@ struct Opt {
     gamma: f64,
 
     #[structopt(short, long, default_value = "11", help = "Density of balls")]
-    ball_density: u32,
+    ball_density: u16,
 
     #[structopt(
         short,
@@ -137,7 +143,7 @@ fn main() -> Result<()> {
         aperture,
         dist_to_focus,
     );
-    let world = random_scene(i64::from(ball_density));
+    let world = random_scene(i32::from(ball_density));
     let pb = ProgressBar::new(u64::from(u32::from(height) * u32::from(width) * nsamples));
     pb.set_style(
         ProgressStyle::default_bar()
@@ -165,7 +171,7 @@ fn main() -> Result<()> {
                         let v = (fy + rand()) / f64::from(height);
                         color(camera.ray(u, v), &world, 0)
                     })
-                    .sum::<Vec3>()
+                    .fold(Vec3::zeros(), Add::add)
                     .div(f64::from(nsamples))
                     .powf(gamma);
                 pb.inc(u64::from(nsamples));

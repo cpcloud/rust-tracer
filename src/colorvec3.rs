@@ -24,7 +24,11 @@ impl ColorVec3 {
 
 impl From<Vec3> for ColorVec3 {
     fn from(vec: Vec3) -> Self {
-        Self((vec * f64::from(u8::MAX)).into_inner().map(|value| value as u8))
+        Self(
+            (vec * f64::from(u8::MAX))
+                .into_inner()
+                .map(|value| value as u8),
+        )
     }
 }
 

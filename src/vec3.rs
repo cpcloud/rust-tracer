@@ -1,8 +1,5 @@
 use nalgebra as na;
-use std::{
-    iter::Sum,
-    ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, Neg, Sub},
-};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vec3(na::Vector3<f64>);
@@ -74,38 +71,35 @@ impl Vec3 {
         na::Unit::new_normalize(self.0).into_inner().into()
     }
 
-    pub fn sum(&self) -> f64 {
-        self.0.sum()
+    pub fn into_unit(self) -> na::Unit<na::Vector3<f64>> {
+        na::Unit::new_normalize(self.0)
     }
 
-    pub fn dot(&self, other: Self) -> f64 {
-        self.0.dot(&other.0)
+    pub fn dot(&self, other: impl Into<Self>) -> f64 {
+        self.0.dot(&other.into().0)
     }
 
-    pub fn cross(&self, other: Self) -> Self {
-        self.0.cross(&other.0).into()
-    }
-
-    pub fn sqrt(&self) -> Self {
-        self.0.map(f64::sqrt).into()
+    pub fn cross(&self, other: impl Into<Self>) -> Self {
+        self.0.cross(&other.into().0).into()
     }
 
     pub fn powf(&self, n: f64) -> Self {
         self.0.map(|value| f64::powf(value, n)).into()
     }
 
-    pub fn lerp(&self, b: Self, t: f64) -> Self {
-        self.0.lerp(&b.0, t).into()
+    pub fn lerp(&self, b: impl Into<Self>, t: f64) -> Self {
+        self.0.lerp(&b.into().0, t).into()
     }
 
     pub fn reflect(&self, n: impl Into<Self>) -> Self {
-        let reflection = na::Reflection::new(na::Unit::new_normalize(n.into().0), 0.0);
-        let mut out = *self;
-        reflection.reflect(&mut out.0);
-        out
+        let reflection = na::Reflection::new(n.into().into_unit(), 0.0);
+        let mut out = self.0;
+        reflection.reflect(&mut out);
+        out.into()
     }
 
-    pub fn refract(&self, n: Self, ni_over_nt: f64) -> Option<Self> {
+    pub fn refract(&self, n: impl Into<Self>, ni_over_nt: f64) -> Option<Self> {
+        let n = n.into();
         let uv = self.unitize();
         let dt = uv.dot(n);
         let disc = 1.0 - ni_over_nt.powi(2) * (1.0 - dt.powi(2));
@@ -117,32 +111,10 @@ impl Vec3 {
     }
 }
 
-impl Sum for Vec3 {
-    fn sum<I>(iter: I) -> Self
-    where
-        I: Iterator<Item = Self>,
-    {
-        iter.fold(Self::zeros(), Add::add)
-    }
-}
-
-impl Index<usize> for Vec3 {
-    type Output = f64;
-
-    fn index(&self, i: usize) -> &f64 {
-        self.0.index(i)
-    }
-}
-
-impl IndexMut<usize> for Vec3 {
-    fn index_mut(&mut self, i: usize) -> &mut f64 {
-        self.0.index_mut(i)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::Vec3;
+    use nalgebra as na;
 
     #[test]
     fn test_reflect() {
@@ -153,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_xyx() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
         assert_eq!(u.x(), 1.0);
         assert_eq!(u.y(), 2.0);
         assert_eq!(u.z(), 3.0);
@@ -161,15 +133,13 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
-        assert_eq!(u[0], 1.0);
-        assert_eq!(u[1], 2.0);
-        assert_eq!(u[2], 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
+        assert_eq!(u.0, na::Vector3::new(1.0, 2.0, 3.0));
     }
 
     #[test]
     fn test_len() {
-        let u = Vec3::new(0.0, 0.0, 0.0);
+        let u = Vec3::from([0.0, 0.0, 0.0]);
         assert_eq!(u.len(), 3);
     }
 
@@ -182,14 +152,14 @@ mod tests {
     #[test]
     fn test_norm2() {
         let expected = 14.0;
-        let u = Vec3::new(1.0, 2.0, 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
         let result = u.norm2();
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_norm() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
         let result = u.norm();
         let expected = (1.0 + 4.0 + 9.0f64).sqrt();
         assert_eq!(result, expected);
@@ -213,7 +183,7 @@ mod tests {
     }
     #[test]
     fn test_cross() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
         let v = u * 2.0;
         let result = u.cross(v);
         let expected = Vec3::from([
@@ -359,105 +329,105 @@ mod arith_tests {
 
     #[test]
     fn test_add_vec_vec() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
-        let v = Vec3::new(2.0, -2.0, 5.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
+        let v = Vec3::from([2.0, -2.0, 5.0]);
         let z = u + v;
-        assert_eq!(z, Vec3::new(3.0, 0.0, 8.0));
+        assert_eq!(z, Vec3::from([3.0, 0.0, 8.0]));
     }
 
     #[test]
     fn test_add_vec_scalar() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
         let v = -1.0;
         let z = u + v;
-        assert_eq!(z, Vec3::new(0.0, 1.0, 2.0));
+        assert_eq!(z, Vec3::from([0.0, 1.0, 2.0]));
     }
 
     #[test]
     fn test_add_scalar_vec() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
         let v = 1.0;
         let z = v + u;
-        assert_eq!(z, Vec3::new(2.0, 3.0, 4.0));
+        assert_eq!(z, Vec3::from([2.0, 3.0, 4.0]));
     }
 
     #[test]
     fn test_sub_vec_vec() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
-        let v = Vec3::new(2.0, -2.0, 5.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
+        let v = Vec3::from([2.0, -2.0, 5.0]);
         let z = u - v;
-        assert_eq!(z, Vec3::new(-1.0, 4.0, -2.0));
+        assert_eq!(z, Vec3::from([-1.0, 4.0, -2.0]));
     }
 
     #[test]
     fn test_sub_vec_scalar() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
         let v = -1.0;
         let z = u - v;
-        assert_eq!(z, Vec3::new(2.0, 3.0, 4.0));
+        assert_eq!(z, Vec3::from([2.0, 3.0, 4.0]));
     }
 
     #[test]
     fn test_sub_scalar_vec() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
         let v = 1.0;
         let z = v - u;
-        assert_eq!(z, Vec3::new(0.0, -1.0, -2.0));
+        assert_eq!(z, Vec3::from([0.0, -1.0, -2.0]));
     }
 
     #[test]
     fn test_mul_vec_vec() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
-        let v = Vec3::new(2.0, -2.0, 5.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
+        let v = Vec3::from([2.0, -2.0, 5.0]);
         let z = u * v;
-        assert_eq!(z, Vec3::new(2.0, -4.0, 15.0));
+        assert_eq!(z, Vec3::from([2.0, -4.0, 15.0]));
     }
 
     #[test]
     fn test_mul_vec_scalar() {
-        let u = Vec3::new(1.0, 2.0, -3.0);
+        let u = Vec3::from([1.0, 2.0, -3.0]);
         let v = -30.0;
         let z = u * v;
-        assert_eq!(z, Vec3::new(-30.0, -60.0, 90.0));
+        assert_eq!(z, Vec3::from([-30.0, -60.0, 90.0]));
     }
 
     #[test]
     fn test_mul_scalar_vec() {
-        let u = Vec3::new(1.0, 2.0, -3.0);
+        let u = Vec3::from([1.0, 2.0, -3.0]);
         let v = -30.0;
         let z = v * u;
-        assert_eq!(z, Vec3::new(-30.0, -60.0, 90.0));
+        assert_eq!(z, Vec3::from([-30.0, -60.0, 90.0]));
     }
 
     #[test]
     fn test_div_vec_vec() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
-        let v = Vec3::new(2.0, -2.0, 5.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
+        let v = Vec3::from([2.0, -2.0, 5.0]);
         let z = u / v;
-        assert_eq!(z, Vec3::new(0.5, -1.0, 3.0 / 5.0));
+        assert_eq!(z, Vec3::from([0.5, -1.0, 3.0 / 5.0]));
     }
 
     #[test]
     fn test_div_vec_scalar() {
-        let u = Vec3::new(1.0, 2.0, -3.0);
+        let u = Vec3::from([1.0, 2.0, -3.0]);
         let v = -30.0;
         let z = u / v;
-        assert_eq!(z, Vec3::new(1.0 / -30.0, 2.0 / -30.0, -3.0 / -30.0));
+        assert_eq!(z, Vec3::from([1.0 / -30.0, 2.0 / -30.0, -3.0 / -30.0]));
     }
 
     #[test]
     fn test_div_scalar_vec() {
-        let u = Vec3::new(1.0, 2.0, -3.0);
+        let u = Vec3::from([1.0, 2.0, -3.0]);
         let v = -30.0;
         let z = v / u;
-        assert_eq!(z, Vec3::new(-30.0 / 1.0, -30.0 / 2.0, -30.0 / -3.0));
+        assert_eq!(z, Vec3::from([-30.0 / 1.0, -30.0 / 2.0, -30.0 / -3.0]));
     }
 
     #[test]
     fn test_neg_vec() {
-        let u = Vec3::new(1.0, 2.0, 3.0);
+        let u = Vec3::from([1.0, 2.0, 3.0]);
         let result = -u;
-        let expected = Vec3::new(-1.0, -2.0, -3.0);
+        let expected = Vec3::from([-1.0, -2.0, -3.0]);
         assert_eq!(result, expected);
     }
 }
